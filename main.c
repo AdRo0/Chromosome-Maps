@@ -149,7 +149,7 @@ void calculate_maps(void)
         if (visited[start])
             continue;
 
-        // --- Find connected component (chromosome) ---
+        // Find connected component
         GQueue queue = G_QUEUE_INIT;
         g_queue_push_tail(&queue, GINT_TO_POINTER(start));
         GArray *component = g_array_new(FALSE, FALSE, sizeof(int));
@@ -179,7 +179,7 @@ void calculate_maps(void)
             continue;
         }
 
-        // --- Run mapping for this chromosome ---
+        // Run mapping for this chromosome
         int anchor_i = -1, anchor_j = -1;
         int max_freq = -1;
         for (int a = 0; a < component->len; a++)
@@ -199,7 +199,7 @@ void calculate_maps(void)
 
         if (anchor_i == -1 || anchor_j == -1)
         {
-            // Single gene: just place at 0
+            // Single gene: place at 0
             for (int a = 0; a < component->len; a++)
             {
                 int i = g_array_index(component, int, a);
@@ -226,19 +226,34 @@ void calculate_maps(void)
             if (k == anchor_i || k == anchor_j)
                 continue;
 
-            if (frequencies[anchor_i][k] != -1 && frequencies[anchor_i][k] < 50)
+            double dist_i = (frequencies[anchor_i][k] != -1 && frequencies[anchor_i][k] < 50)
+                                ? haldane_to_cm(frequencies[anchor_i][k])
+                                : -1;
+            double dist_j = (frequencies[anchor_j][k] != -1 && frequencies[anchor_j][k] < 50)
+                                ? haldane_to_cm(frequencies[anchor_j][k])
+                                : -1;
+
+            if (dist_i != -1 && dist_j != -1)
             {
-                double dist = haldane_to_cm(frequencies[anchor_i][k]);
-                genes[k].pos = genes[anchor_i].pos - dist;
-                genes[k].possible_pos = genes[anchor_i].pos + dist;
+                double total = dist_i + dist_j;
+                double ratio = dist_i / total;
+                genes[k].pos = genes[anchor_i].pos + ratio * (genes[anchor_j].pos - genes[anchor_i].pos);
             }
-            else if (frequencies[anchor_j][k] != -1 && frequencies[anchor_j][k] < 50)
+            else if (dist_i != -1)
             {
-                double dist = haldane_to_cm(frequencies[anchor_j][k]);
-                genes[k].pos = genes[anchor_j].pos - dist;
-                genes[k].possible_pos = genes[anchor_j].pos + dist;
+                genes[k].pos = genes[anchor_i].pos - dist_i;
             }
+            else if (dist_j != -1)
+            {
+                genes[k].pos = genes[anchor_j].pos + dist_j;
+            }
+            else
+            {
+                genes[k].pos = 0;
+            }
+
             genes[k].chromosome = current_chr;
+            genes[k].possible_pos = -1;
         }
 
         // Resolve ambiguities
