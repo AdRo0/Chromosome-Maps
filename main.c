@@ -241,19 +241,30 @@ void calculate_maps(void)
             }
             else if (dist_i != -1)
             {
-                genes[k].pos = genes[anchor_i].pos - dist_i;
+                genes[k].pos = genes[anchor_i].pos + dist_i;
+                genes[k].possible_pos = genes[anchor_i].pos - dist_i;
             }
             else if (dist_j != -1)
             {
-                genes[k].pos = genes[anchor_j].pos + dist_j;
+                genes[k].pos = genes[anchor_j].pos - dist_j;
+                genes[k].possible_pos = genes[anchor_j].pos + dist_j;
             }
             else
             {
-                genes[k].pos = 0;
+                for (int b = 0; b < genes_count; b++)
+                {
+                    if (frequencies[k][b] == -1)
+                        continue;
+
+                    if (genes[b].pos == -1)
+                        continue;
+
+                    genes[k].pos = genes[b].pos + haldane_to_cm(frequencies[k][b]);
+                    genes[k].possible_pos = genes[b].pos - haldane_to_cm(frequencies[k][b]);
+                }
             }
 
             genes[k].chromosome = current_chr;
-            genes[k].possible_pos = -1;
         }
 
         // Resolve ambiguities
