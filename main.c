@@ -132,6 +132,67 @@ int best_match(double gene_pos, double pos_a, double pos_b, double desired_dist)
         return -1;
 }
 
+void create_probs_table()
+{
+    char buf[16];
+    for (int i = 0; i <= genes_count; i++)
+    {
+        for (int j = 0; j <= genes_count; j++)
+        {
+            GtkWidget *to_attach;
+            if (i == 0 && j == 0)
+                continue;
+            if (i == 0 && j != 0)
+            {
+                to_attach = gtk_entry_new();
+                gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
+                gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
+                snprintf(buf, sizeof(buf), "G%d", j);
+                gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
+
+                g_object_set_data(G_OBJECT(to_attach), "node-index", GINT_TO_POINTER(j));
+                gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
+                continue;
+            }
+            if (j == 0 && i != 0)
+            {
+                to_attach = gtk_entry_new();
+                gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
+                gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
+                snprintf(buf, sizeof(buf), "G%d", i);
+                gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
+
+                GtkWidget *col_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i, 0);
+
+                // g_signal_connect(to_attach, "changed", G_CALLBACK(on_name_changed), col_entry);
+                // g_signal_connect(col_entry, "changed", G_CALLBACK(on_name_changed), to_attach);
+
+                gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
+                continue;
+            }
+            to_attach = gtk_entry_new();
+            gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
+            gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
+            gtk_entry_set_input_purpose(GTK_ENTRY(to_attach), GTK_INPUT_PURPOSE_DIGITS);
+
+            if (i == j)
+            {
+                gtk_entry_set_text(GTK_ENTRY(to_attach), "0");
+                gtk_widget_set_sensitive(to_attach, FALSE);
+            }
+            else if (i > j)
+            {
+                gtk_entry_set_text(GTK_ENTRY(to_attach), "-");
+                gtk_widget_set_sensitive(to_attach, FALSE);
+            }
+            else
+                gtk_entry_set_text(GTK_ENTRY(to_attach), "");
+            gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
+        }
+    }
+    gtk_widget_show_all(probabilities_grid);
+}
+
 int calculate_maps(void)
 {
     setup_genes_arr();
@@ -323,220 +384,141 @@ int calculate_maps(void)
     return 0;
 }
 
-void create_probs_table()
-{
-    char buf[16];
-    for (int i = 0; i <= genes_count; i++)
-    {
-        for (int j = 0; j <= genes_count; j++)
-        {
-            GtkWidget *to_attach;
-            if (i == 0 && j == 0)
-                continue;
-            if (i == 0 && j != 0)
-            {
-                to_attach = gtk_entry_new();
-                gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
-                gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
-                snprintf(buf, sizeof(buf), "G%d", j);
-                gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
-
-                g_object_set_data(G_OBJECT(to_attach), "node-index", GINT_TO_POINTER(j));
-                gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
-                continue;
-            }
-            if (j == 0 && i != 0)
-            {
-                to_attach = gtk_entry_new();
-                gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
-                gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
-                snprintf(buf, sizeof(buf), "G%d", i);
-                gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
-
-                GtkWidget *col_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i, 0);
-
-                // g_signal_connect(to_attach, "changed", G_CALLBACK(on_name_changed), col_entry);
-                // g_signal_connect(col_entry, "changed", G_CALLBACK(on_name_changed), to_attach);
-
-                gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
-                continue;
-            }
-            to_attach = gtk_entry_new();
-            gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
-            gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
-            gtk_entry_set_input_purpose(GTK_ENTRY(to_attach), GTK_INPUT_PURPOSE_DIGITS);
-
-            if (i == j)
-            {
-                gtk_entry_set_text(GTK_ENTRY(to_attach), "0");
-                gtk_widget_set_sensitive(to_attach, FALSE);
-            }
-            else if (i > j)
-            {
-                gtk_entry_set_text(GTK_ENTRY(to_attach), "-");
-                gtk_widget_set_sensitive(to_attach, FALSE);
-            }
-            else
-                gtk_entry_set_text(GTK_ENTRY(to_attach), "");
-            gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
-        }
-    }
-    gtk_widget_show_all(probabilities_grid);
-}
-
 static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
-    int previous_last_fork_i = 99999;
-    int last_fork_i = 1;
     double offset_x = pan_x;
-    while (last_fork_i != -1)
+    int width = gtk_widget_get_allocated_width(widget);
+    int height = gtk_widget_get_allocated_height(widget);
+
+    double rect_w = 900;
+    double rect_h = 100;
+    double radius = 20.0;
+
+    // Find number of chromosomes
+    int max_chr = -1;
+    for (int i = 0; i < genes_count; i++)
     {
-        last_fork_i = -1;
-        int width = gtk_widget_get_allocated_width(widget);
-        int height = gtk_widget_get_allocated_height(widget);
+        if (genes[i].chromosome > max_chr)
+            max_chr = genes[i].chromosome;
+    }
+    int chr_count = max_chr + 1;
 
-        double rect_w = 900;
-        double rect_h = 100;
-        double radius = 20.0;
+    double chr_spacing = 200; // vertical spacing between chromosomes
 
-        // Find number of chromosomes
-        int max_chr = -1;
+    int line_index = 0;
+    for (int chr = 0; chr < chr_count; chr++)
+    {
+        // Y offset for this chromosome
+        double y_offset = chr * chr_spacing + 50;
+
+        // Apply offset_x consistently - only once to the base position
+        double x0 = (width - rect_w) / 2.0 + offset_x;
+        double y0 = y_offset;
+        double x1 = x0 + rect_w;
+        double y1 = y0 + rect_h;
+
+        // Draw chromosome rectangle
+        cairo_new_sub_path(cr);
+        cairo_arc(cr, x1 - radius, y0 + radius, radius, -90 * (M_PI / 180), 0);
+        cairo_arc(cr, x1 - radius, y1 - radius, radius, 0, 90 * (M_PI / 180));
+        cairo_arc(cr, x0 + radius, y1 - radius, radius, 90 * (M_PI / 180), 180 * (M_PI / 180));
+        cairo_arc(cr, x0 + radius, y0 + radius, radius, 180 * (M_PI / 180), 270 * (M_PI / 180));
+        cairo_close_path(cr);
+
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, 0, 0, 0);
+        cairo_set_line_width(cr, 2.0);
+        cairo_stroke(cr);
+
+        // Collect min/max positions for scaling
+        double min_pos = DBL_MAX, max_pos = -DBL_MAX;
         for (int i = 0; i < genes_count; i++)
         {
-            if (genes[i].chromosome > max_chr)
-                max_chr = genes[i].chromosome;
+            if (genes[i].chromosome != chr)
+                continue;
+            if (genes[i].pos < min_pos)
+                min_pos = genes[i].pos;
+            if (genes[i].pos > max_pos)
+                max_pos = genes[i].pos;
         }
-        int chr_count = max_chr + 1;
+        if (min_pos == DBL_MAX)
+            continue; // empty chromosome
 
-        double chr_spacing = 200; // vertical spacing between chromosomes
+        double span = max_pos - min_pos;
+        if (span == 0)
+            span = 1;
 
-        for (int chr = 0; chr < chr_count; chr++)
+        double margin = rect_w * 0.05;
+        double usable_w = rect_w - 2 * margin;
+        double gy = (y0 + y1) / 2.0;
+
+        // Precompute x positions - these are already relative to x0 which includes offset
+        double *gene_x = g_new(double, genes_count);
+        for (int i = 0; i < genes_count; i++)
         {
-            // Y offset for this chromosome
-            double y_offset = chr * chr_spacing + 50;
+            if (genes[i].chromosome != chr)
+                continue;
+            double norm = (genes[i].pos - min_pos) / span;
+            gene_x[i] = x0 + margin + norm * usable_w;
+        }
 
-            // Apply offset_x consistently - only once to the base position
-            double x0 = (width - rect_w) / 2.0 + offset_x;
-            double y0 = y_offset;
-            double x1 = x0 + rect_w;
-            double y1 = y0 + rect_h;
+        // Draw gene markers + labels
+        for (int i = 0; i < genes_count; i++)
+        {
+            if (genes[i].chromosome != chr)
+                continue;
 
-            // Draw chromosome rectangle
-            cairo_new_sub_path(cr);
-            cairo_arc(cr, x1 - radius, y0 + radius, radius, -90 * (M_PI / 180), 0);
-            cairo_arc(cr, x1 - radius, y1 - radius, radius, 0, 90 * (M_PI / 180));
-            cairo_arc(cr, x0 + radius, y1 - radius, radius, 90 * (M_PI / 180), 180 * (M_PI / 180));
-            cairo_arc(cr, x0 + radius, y0 + radius, radius, 180 * (M_PI / 180), 270 * (M_PI / 180));
-            cairo_close_path(cr);
-
-            cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-            cairo_fill_preserve(cr);
-            cairo_set_source_rgb(cr, 0, 0, 0);
-            cairo_set_line_width(cr, 2.0);
+            cairo_set_source_rgb(cr, 1, 0, 0);
+            cairo_set_line_width(cr, 4.0);
+            cairo_move_to(cr, gene_x[i], y0);
+            cairo_line_to(cr, gene_x[i], y1);
             cairo_stroke(cr);
 
-            // Collect min/max positions for scaling
-            double min_pos = DBL_MAX, max_pos = -DBL_MAX;
-            for (int i = 0; i < genes_count; i++)
+            cairo_set_source_rgb(cr, 0, 0, 0);
+            cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+            cairo_set_font_size(cr, 12.0);
+            cairo_text_extents_t extents;
+            cairo_text_extents(cr, genes[i].name, &extents);
+            double label_x = gene_x[i] - extents.width / 2.0;
+            double label_y = y0 - 8; // 8 pixels above the chromosome rectangle
+            cairo_move_to(cr, label_x, label_y);
+            cairo_show_text(cr, genes[i].name);
+        }
+
+        // Draw cM distances (only i < j, same chromosome) for all gene pairs in this map
+        for (int i = 0; i < genes_count; i++)
+        {
+            if (genes[i].chromosome != chr)
+                continue;
+            for (int j = i + 1; j < genes_count; j++)
             {
-                if (genes[i].possible_pos != -1 && i > last_fork_i && i < previous_last_fork_i)
-                {
-                    previous_last_fork_i = last_fork_i;
-                    last_fork_i = i;
-                }
-                if (genes[i].chromosome != chr)
+                if (genes[j].chromosome != chr)
                     continue;
-                if (genes[i].pos < min_pos)
-                    min_pos = genes[i].pos;
-                if (genes[i].pos > max_pos)
-                    max_pos = genes[i].pos;
-            }
-            if (min_pos == DBL_MAX)
-                continue; // empty chromosome
-
-            double span = max_pos - min_pos;
-            if (span == 0)
-                span = 1;
-
-            double margin = rect_w * 0.05;
-            double usable_w = rect_w - 2 * margin;
-            double gy = (y0 + y1) / 2.0;
-
-            // Precompute x positions - these are already relative to x0 which includes offset
-            double *gene_x = g_new(double, genes_count);
-            for (int i = 0; i < genes_count; i++)
-            {
-                if (genes[i].chromosome != chr)
-                    continue;
-                double norm = (genes[i].pos - min_pos) / span;
-                gene_x[i] = x0 + margin + norm * usable_w;
-            }
-
-            // Draw gene markers + labels
-            for (int i = 0; i < genes_count; i++)
-            {
-                if (genes[i].chromosome != chr)
+                if (frequencies[i][j] == -1 || frequencies[i][j] == 50)
                     continue;
 
-                cairo_set_source_rgb(cr, 1, 0, 0);
-                cairo_set_line_width(cr, 4.0);
-                cairo_move_to(cr, gene_x[i], y0);
-                cairo_line_to(cr, gene_x[i], y1);
-                cairo_stroke(cr);
+                double cm = haldane_to_cm(frequencies[i][j]);
+                double offset = (line_index + 1) * 20.0;
+                double yline = y1 + offset;
 
                 cairo_set_source_rgb(cr, 0, 0, 0);
-                cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-                cairo_set_font_size(cr, 12.0);
-                cairo_move_to(cr, gene_x[i] + 6, gy);
-                cairo_show_text(cr, genes[i].name);
+                cairo_set_line_width(cr, 1.5);
+                cairo_move_to(cr, gene_x[i], yline);
+                cairo_line_to(cr, gene_x[j], yline);
+                cairo_stroke(cr);
+
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%.1f cM", cm);
+                double midx = (gene_x[i] + gene_x[j]) / 2.0;
+                cairo_move_to(cr, midx - 10, yline - 4);
+                cairo_show_text(cr, buf);
+
+                line_index++;
             }
-
-            // Draw cM distances (only i < j, same chromosome)
-            int line_index = 0;
-            for (int i = 0; i < genes_count; i++)
-            {
-                if (genes[i].chromosome != chr)
-                    continue;
-                for (int j = i + 1; j < genes_count; j++)
-                {
-                    if (genes[j].chromosome != chr)
-                        continue;
-                    if (frequencies[i][j] == -1 || frequencies[i][j] == 50)
-                        continue;
-
-                    double cm = haldane_to_cm(frequencies[i][j]);
-                    double offset = (line_index + 1) * 20.0;
-                    double yline = y1 + offset;
-
-                    cairo_set_source_rgb(cr, 0, 0, 0);
-                    cairo_set_line_width(cr, 1.5);
-                    cairo_move_to(cr, gene_x[i], yline);
-                    cairo_line_to(cr, gene_x[j], yline);
-                    cairo_stroke(cr);
-
-                    char buf[64];
-                    snprintf(buf, sizeof(buf), "%.1f cM", cm);
-                    double midx = (gene_x[i] + gene_x[j]) / 2.0;
-                    cairo_move_to(cr, midx - 10, yline - 4);
-                    cairo_show_text(cr, buf);
-
-                    line_index++;
-                }
-            }
-
-            g_free(gene_x);
         }
-        if (last_fork_i != -1)
-        {
-            double temp = genes[last_fork_i].pos;
-            genes[last_fork_i].pos = genes[last_fork_i].possible_pos;
-            genes[last_fork_i].possible_pos = temp;
 
-            temp = genes[previous_last_fork_i].pos;
-            genes[previous_last_fork_i].pos = genes[previous_last_fork_i].possible_pos;
-            genes[previous_last_fork_i].possible_pos = temp;
-        }
-        offset_x += 950;
+        g_free(gene_x);
     }
 
     return FALSE;
