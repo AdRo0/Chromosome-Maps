@@ -13,6 +13,9 @@ GArray *possibilities_arr;
 
 static double pan_x = 0.0;
 static double last_drag_x = 0.0;
+static double pan_y = 0.0;
+static double last_drag_y = 0.0;
+double zoom_factor = 1.0;
 static gboolean dragging = FALSE;
 
 typedef struct
@@ -21,7 +24,6 @@ typedef struct
     double pos;
     double possible_pos; // Other possible position
     int chromosome;
-    int anchor_id;
 } Gene;
 Gene genes[5];
 
@@ -309,13 +311,11 @@ int calculate_maps(void)
                 g_print("DIST I: %s - anchi: %d, anchj: %d / %d / %d / %f\n", genes[k].name, anchor_i, anchor_j, start, k, dist_j);
                 genes[k].pos = genes[anchor_i].pos + dist_i;
                 genes[k].possible_pos = genes[anchor_i].pos - dist_i;
-                genes[k].anchor_id = anchor_i;
             }
             else if (dist_j > 0 && dist_i < 0)
             {
                 genes[k].pos = genes[anchor_j].pos - dist_j;
                 genes[k].possible_pos = genes[anchor_j].pos + dist_j;
-                genes[k].anchor_id = anchor_j;
             }
             else
             {
@@ -329,7 +329,6 @@ int calculate_maps(void)
 
                     genes[k].pos = genes[b].pos + haldane_to_cm(frequencies[k][b]);
                     genes[k].possible_pos = genes[b].pos - haldane_to_cm(frequencies[k][b]);
-                    genes[k].anchor_id = b;
                     genes[b].possible_pos = -1;
                     g_print("ELSE: %s, %.2f, %.2f\n", genes[k].name, genes[k].pos, genes[k].possible_pos);
                 }
@@ -373,13 +372,11 @@ int calculate_maps(void)
                     // else if (match == 0)
                     // {
                     //     genes[i].possible_pos = -1;
-                    //     genes[i].anchor_id = -1;
                     // }
                     // else
                     // {
                     //     genes[i].pos = genes[i].possible_pos;
                     //     genes[i].possible_pos = -1;
-                    //     genes[i].anchor_id = -1;
                     // }
                     // changes++;
                 }
@@ -396,6 +393,9 @@ int calculate_maps(void)
 
 void draw_first_sol(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
+    cairo_translate(cr, pan_x, pan_y);
+    cairo_scale(cr, zoom_factor, zoom_factor);
+
     double offset_x = pan_x;
     int width = gtk_widget_get_allocated_width(widget);
     int height = gtk_widget_get_allocated_height(widget);
@@ -422,7 +422,7 @@ void draw_first_sol(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
         // Apply offset_x consistently - only once to the base position
         double x0 = (width - rect_w) / 2.0 + offset_x;
-        double y0 = y_offset;
+        double y0 = y_offset + pan_y;
         double x1 = x0 + rect_w;
         double y1 = y0 + rect_h;
 
@@ -522,6 +522,9 @@ void draw_first_sol(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
 void draw_other_sols(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
+    cairo_translate(cr, pan_x, pan_y);
+    cairo_scale(cr, zoom_factor, zoom_factor);
+
     for (gint k = 0; k < possibilities_arr->len; k++)
     {
         gint gene_id = g_array_index(possibilities_arr, gint, k);
@@ -534,7 +537,9 @@ void draw_other_sols(GtkWidget *widget, cairo_t *cr, gpointer user_data)
                 genes[gene_id].possible_pos = temp;
                 continue;
             }
-            double offset_x = pan_x + (950 * ((k * 2) + p));
+
+            // Remove pan_x/pan_y usage here since we moved pan into cairo_translate
+            double offset_x = (1000 * ((k * 2) + p));
             int width = gtk_widget_get_allocated_width(widget);
             int height = gtk_widget_get_allocated_height(widget);
 
@@ -558,7 +563,6 @@ void draw_other_sols(GtkWidget *widget, cairo_t *cr, gpointer user_data)
                 // Y offset for this chromosome
                 double y_offset = chr * chr_spacing + 50;
 
-                // Apply offset_x consistently - only once to the base position
                 double x0 = (width - rect_w) / 2.0 + offset_x;
                 double y0 = y_offset;
                 double x1 = x0 + rect_w;
@@ -688,7 +692,7 @@ void on_buildBtn_clicked(GtkButton *button, gpointer user_data)
     }
     for (int i = 0; i < genes_count; i++)
     {
-        g_print("%s: %2.f / %2.f / %d, ", genes[i].name, genes[i].pos, genes[i].possible_pos, genes[i].anchor_id);
+        g_print("%s: %2.f / %2.f, ", genes[i].name, genes[i].pos, genes[i].possible_pos);
     }
 
     possibilities_arr = g_array_new(FALSE, FALSE, sizeof(gint));
@@ -704,12 +708,25 @@ void on_buildBtn_clicked(GtkButton *button, gpointer user_data)
     gtk_stack_set_visible_child_name(GTK_STACK(main_stack), "page2");
 }
 
+void on_zoom_in(GtkButton *button, gpointer user_data)
+{
+    zoom_factor *= 1.1;
+    gtk_widget_queue_draw(drawing_area);
+}
+
+void on_zoom_out(GtkButton *button, gpointer user_data)
+{
+    zoom_factor /= 1.1;
+    gtk_widget_queue_draw(drawing_area);
+}
+
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
     if (event->button == GDK_BUTTON_PRIMARY)
     {
         dragging = TRUE;
         last_drag_x = event->x;
+        last_drag_y = event->y;
         return TRUE;
     }
     return FALSE;
@@ -730,8 +747,14 @@ static gboolean on_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpoin
     if (dragging)
     {
         double dx = event->x - last_drag_x;
+        double dy = event->y - last_drag_y;
+
         pan_x += dx;
+        pan_y += dy;
+
         last_drag_x = event->x;
+        last_drag_y = event->y;
+
         gtk_widget_queue_draw(widget);
         return TRUE;
     }
