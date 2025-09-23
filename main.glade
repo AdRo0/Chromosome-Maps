@@ -289,7 +289,7 @@
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkScrolledWindow">
-                <property name="height-request">500</property>
+                <property name="height-request">600</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="shadow-type">in</property>
@@ -316,13 +316,16 @@
               <object class="GtkBox">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="homogeneous">True</property>
+                <property name="margin-top">10</property>
+                <property name="margin-bottom">10</property>
+                <property name="spacing">30</property>
                 <child>
                   <object class="GtkButton" id="saveBtn1">
                     <property name="label" translatable="yes">-Zoom</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
+                    <property name="margin-start">30</property>
                     <signal name="clicked" handler="on_zoom_out" swapped="no"/>
                   </object>
                   <packing>
@@ -337,6 +340,7 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
+                    <property name="margin-end">30</property>
                     <signal name="clicked" handler="on_zoom_in" swapped="no"/>
                   </object>
                   <packing>
@@ -368,6 +372,77 @@
         <property name="title" translatable="yes">Knapsack</property>
         <property name="subtitle" translatable="yes">Operations Research</property>
         <property name="show-close-button">True</property>
+      </object>
+    </child>
+  </object>
+  <object class="GtkDialog" id="failed_dial">
+    <property name="can-focus">False</property>
+    <property name="type-hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <placeholder/>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-start">15</property>
+            <property name="margin-end">15</property>
+            <property name="margin-top">20</property>
+            <property name="margin-bottom">15</property>
+            <property name="vexpand">True</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">35</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Warning!</property>
+                <attributes>
+                  <attribute name="font-desc" value="Sans Bold 24"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Failed. Please check entries.</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="padding">9</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
       </object>
     </child>
   </object>

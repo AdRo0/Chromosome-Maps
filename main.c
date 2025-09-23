@@ -9,6 +9,7 @@ GtkWidget *probabilities_grid;
 GtkWidget *main_stack;
 GtkWidget *main_window;
 GtkWidget *drawing_area;
+GtkWidget *failed_dial;
 GArray *possibilities_arr;
 
 static double pan_x = 0.0;
@@ -25,11 +26,10 @@ typedef struct
     double possible_pos; // Other possible position
     int chromosome;
 } Gene;
-Gene genes[5];
+Gene *genes;
 
-int **frequencies;
-int **distances; // in cM
-int genes_count = 5;
+double **frequencies;
+int genes_count = 0;
 
 void setup_genes_arr()
 {
@@ -48,7 +48,7 @@ void setup_genes_arr()
 }
 
 // Recombination frequency to map distance in centiMorgan
-double haldane_to_cm(int r_percent)
+double haldane_to_cm(double r_percent)
 {
     double r = r_percent / 100.0;
     if (r < 0.0 || r > 0.5)
@@ -70,12 +70,12 @@ double haldane_to_r(double cm)
     return 0.5 * (1.0 - exp(-2.0 * cm / 100.0));
 }
 
-void setup_frequencies_table()
+int setup_frequencies_table()
 {
-    frequencies = malloc(genes_count * sizeof(int *));
+    frequencies = malloc(genes_count * sizeof(double *));
     for (int i = 0; i < genes_count; i++)
     {
-        frequencies[i] = malloc(genes_count * sizeof(int));
+        frequencies[i] = malloc(genes_count * sizeof(double));
     }
 
     for (int i = 1; i <= genes_count; i++)
@@ -84,29 +84,36 @@ void setup_frequencies_table()
         {
             if (i > j)
                 continue;
+
             GtkWidget *child = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), j, i);
             const char *text = gtk_entry_get_text(GTK_ENTRY(child));
-            int ivalue;
+            double dvalue;
 
             if (text[0] == '\0')
             {
-                ivalue = -1;
+                dvalue = -1.0;
             }
             else
             {
-                ivalue = atoi(text);
+                char *endptr;
+                dvalue = strtod(text, &endptr);
+
+                if (*endptr != '\0')
+                {
+                    return -1;
+                }
             }
 
-            if (ivalue > 50 || ivalue < -1)
+            if (dvalue > 50.0 || dvalue < -1.0)
             {
-                g_warning("Aborted draw: Inconsistent probabilities!");
-                return;
+                return -1;
             }
 
-            frequencies[i - 1][j - 1] = ivalue;
-            frequencies[j - 1][i - 1] = ivalue;
+            frequencies[i - 1][j - 1] = dvalue;
+            frequencies[j - 1][i - 1] = dvalue;
         }
     }
+    return 0;
 }
 
 // Returns 0 if pos_a is better. Return 1 if pos_b is better. Return -1 if none
@@ -117,8 +124,6 @@ int best_match(double gene_pos, double pos_a, double pos_b, double desired_dist)
 
     double diff_a = fabs(dist_a - desired_dist);
     double diff_b = fabs(dist_b - desired_dist);
-
-    g_print("difa: %.2f, difb: %.2f, posa: %.2f, posb: %.2f, post: %.2f, dist: %.2f\n", diff_a, diff_b, pos_a, pos_b, gene_pos, desired_dist);
 
     if (diff_a <= diff_b)
     {
@@ -136,17 +141,28 @@ int best_match(double gene_pos, double pos_a, double pos_b, double desired_dist)
         return -1;
 }
 
+void on_header_changed(GtkEditable *editable, gpointer user_data)
+{
+    GtkEntry *entry = GTK_ENTRY(editable);
+    GtkWidget *linked = g_object_get_data(G_OBJECT(entry), "linked-entry");
+    if (linked)
+    {
+        const gchar *text = gtk_entry_get_text(entry);
+        gtk_entry_set_text(GTK_ENTRY(linked), text);
+    }
+}
+
 void create_probs_table()
 {
     char buf[16];
+    GtkWidget *to_attach;
     for (int i = 0; i <= genes_count; i++)
     {
         for (int j = 0; j <= genes_count; j++)
         {
-            GtkWidget *to_attach;
             if (i == 0 && j == 0)
                 continue;
-            if (i == 0 && j != 0)
+            if (i == 0 && j != 0) // top row headers
             {
                 to_attach = gtk_entry_new();
                 gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
@@ -154,22 +170,22 @@ void create_probs_table()
                 snprintf(buf, sizeof(buf), "G%d", j);
                 gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
 
+                // Store the linked row entry pointer for synchronization
+                g_object_set_data(G_OBJECT(to_attach), "linked-entry", NULL); // will set later
                 g_object_set_data(G_OBJECT(to_attach), "node-index", GINT_TO_POINTER(j));
+
                 gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
+
                 continue;
             }
-            if (j == 0 && i != 0)
+
+            if (j == 0 && i != 0) // left column headers
             {
                 to_attach = gtk_entry_new();
                 gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
                 gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
                 snprintf(buf, sizeof(buf), "G%d", i);
                 gtk_entry_set_text(GTK_ENTRY(to_attach), buf);
-
-                GtkWidget *col_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i, 0);
-
-                // g_signal_connect(to_attach, "changed", G_CALLBACK(on_name_changed), col_entry);
-                // g_signal_connect(col_entry, "changed", G_CALLBACK(on_name_changed), to_attach);
 
                 gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
                 continue;
@@ -194,13 +210,28 @@ void create_probs_table()
             gtk_grid_attach(GTK_GRID(probabilities_grid), to_attach, j, i, 1, 1);
         }
     }
+    for (int i = 1; i <= genes_count; i++)
+    {
+        GtkWidget *row_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), 0, i);
+        GtkWidget *col_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i, 0);
+
+        // Store each other as linked
+        g_object_set_data(G_OBJECT(row_entry), "linked-entry", col_entry);
+        g_object_set_data(G_OBJECT(col_entry), "linked-entry", row_entry);
+
+        // Connect the changed signal
+        g_signal_connect(row_entry, "changed", G_CALLBACK(on_header_changed), NULL);
+        g_signal_connect(col_entry, "changed", G_CALLBACK(on_header_changed), NULL);
+    }
     gtk_widget_show_all(probabilities_grid);
 }
 
 int calculate_maps(void)
 {
     setup_genes_arr();
-    setup_frequencies_table();
+    int setup = setup_frequencies_table();
+    if (setup == -1)
+        return;
 
     int current_chr = 0;
     gboolean *visited = g_new0(gboolean, genes_count);
@@ -227,7 +258,7 @@ int calculate_maps(void)
             {
                 if (j == idx || visited[j])
                     continue;
-                if (frequencies[idx][j] != -1 && frequencies[idx][j] < 50)
+                if (frequencies[idx][j] > 0 && frequencies[idx][j] < 50)
                 {
                     g_queue_push_tail(&queue, GINT_TO_POINTER(j));
                 }
@@ -285,10 +316,10 @@ int calculate_maps(void)
             if (k == anchor_i || k == anchor_j)
                 continue;
 
-            double dist_i = (frequencies[anchor_i][k] != -1 && frequencies[anchor_i][k] < 50)
+            double dist_i = (frequencies[anchor_i][k] > 0 && frequencies[anchor_i][k] < 50)
                                 ? haldane_to_cm(frequencies[anchor_i][k])
                                 : -1;
-            double dist_j = (frequencies[anchor_j][k] != -1 && frequencies[anchor_j][k] < 50)
+            double dist_j = (frequencies[anchor_j][k] > 0 && frequencies[anchor_j][k] < 50)
                                 ? haldane_to_cm(frequencies[anchor_j][k])
                                 : -1;
 
@@ -301,14 +332,9 @@ int calculate_maps(void)
                 dist_j = (fabs(genes[k].pos - genes[anchor_j].pos));
                 if (haldane_to_r(dist_i) * 100 > frequencies[k][anchor_i] * 1.7 || haldane_to_r(dist_j) * 100 > frequencies[k][anchor_j] * 1.7)
                     return -1;
-                else
-                {
-                    g_print("DIFF I: %.2f / %.2f", haldane_to_r(dist_i), frequencies[k][anchor_i] * 2.0);
-                }
             }
             else if (dist_i > 0 && dist_j < 0)
             {
-                g_print("DIST I: %s - anchi: %d, anchj: %d / %d / %d / %f\n", genes[k].name, anchor_i, anchor_j, start, k, dist_j);
                 genes[k].pos = genes[anchor_i].pos + dist_i;
                 genes[k].possible_pos = genes[anchor_i].pos - dist_i;
             }
@@ -321,7 +347,7 @@ int calculate_maps(void)
             {
                 for (int b = 0; b < genes_count; b++)
                 {
-                    if (frequencies[k][b] == -1 || k == b)
+                    if (frequencies[k][b] > 0 || k == b)
                         continue;
 
                     if (fabs(genes[b].pos - (-1.0)) < 1e-9) // genes[b].pos == -1
@@ -330,7 +356,6 @@ int calculate_maps(void)
                     genes[k].pos = genes[b].pos + haldane_to_cm(frequencies[k][b]);
                     genes[k].possible_pos = genes[b].pos - haldane_to_cm(frequencies[k][b]);
                     genes[b].possible_pos = -1;
-                    g_print("ELSE: %s, %.2f, %.2f\n", genes[k].name, genes[k].pos, genes[k].possible_pos);
                 }
             }
 
@@ -353,7 +378,7 @@ int calculate_maps(void)
                     int j = g_array_index(component, int, b);
                     if (i == j)
                         continue;
-                    if (frequencies[i][j] == -1 || frequencies[i][j] == 50)
+                    if (frequencies[i][j] < 0 || frequencies[i][j] > 49.9)
                         continue;
                     if (fabs(genes[j].pos - (-1.0)) < 1e-9 ||          // genes[j].pos == -1 ||
                         fabs(genes[j].possible_pos - (-1.0)) > 1e-9 || // genes[j].possible_pos != -1 ||
@@ -364,7 +389,6 @@ int calculate_maps(void)
 
                     double dist = haldane_to_cm(frequencies[i][j]);
                     int match = best_match(genes[j].pos, genes[i].pos, genes[i].possible_pos, dist);
-                    g_print("MATCHING\n");
                     if (match == -1)
                     {
                         return -1;
@@ -678,6 +702,7 @@ static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data
 void on_continueBtn_clicked(GtkButton *button, gpointer user_data)
 {
     genes_count = (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(n_spin));
+    genes = (Gene *)malloc(genes_count * sizeof(Gene));
     create_probs_table();
     gtk_stack_set_visible_child_name(GTK_STACK(main_stack), "page1");
 }
@@ -687,22 +712,16 @@ void on_buildBtn_clicked(GtkButton *button, gpointer user_data)
     int maps_result = calculate_maps();
     if (maps_result == -1)
     {
-        g_print("FAILED: CHECK ENTRIES!");
+        gtk_widget_show(failed_dial);
+        // g_print("FAILED: CHECK ENTRIES!");
         return;
-    }
-    for (int i = 0; i < genes_count; i++)
-    {
-        g_print("%s: %2.f / %2.f, ", genes[i].name, genes[i].pos, genes[i].possible_pos);
     }
 
     possibilities_arr = g_array_new(FALSE, FALSE, sizeof(gint));
     for (gint i = 0; i < genes_count; i++)
     {
         if (fabs(fabs(genes[i].possible_pos) - 1.0) > 1e-9)
-        {
             g_array_append_val(possibilities_arr, i);
-            g_print("\n2 pos: %d, %f", i, fabs(genes[i].possible_pos));
-        }
     }
     gtk_widget_queue_draw(drawing_area);
     gtk_stack_set_visible_child_name(GTK_STACK(main_stack), "page2");
@@ -778,6 +797,7 @@ int main(int argc, char *argv[])
     n_spin = GTK_WIDGET(gtk_builder_get_object(builder, "n_spin"));
     probabilities_grid = GTK_WIDGET(gtk_builder_get_object(builder, "probabilities_grid"));
     drawing_area = GTK_WIDGET(gtk_builder_get_object(builder, "drawing_area"));
+    failed_dial = GTK_WIDGET(gtk_builder_get_object(builder, "failed_dial"));
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_draw_event), NULL);
 
     gtk_widget_add_events(drawing_area,
@@ -793,6 +813,8 @@ int main(int argc, char *argv[])
     gtk_main();
 
     g_object_unref(builder);
+
+    free(genes);
 
     return 0;
 }
