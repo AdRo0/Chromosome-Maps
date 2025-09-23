@@ -9,7 +9,6 @@ GtkWidget *probabilities_grid;
 GtkWidget *main_stack;
 GtkWidget *main_window;
 GtkWidget *drawing_area;
-GtkWidget *failed_dial;
 GArray *possibilities_arr;
 
 static double pan_x = 0.0;
@@ -92,6 +91,9 @@ int setup_frequencies_table()
             if (text[0] == '\0')
             {
                 dvalue = -1.0;
+                frequencies[i - 1][j - 1] = dvalue;
+                frequencies[j - 1][i - 1] = dvalue;
+                continue;
             }
             else
             {
@@ -102,15 +104,14 @@ int setup_frequencies_table()
                 {
                     return -1;
                 }
-            }
+                if (dvalue > 50.0 || dvalue < -1.0)
+                {
+                    return -1;
+                }
 
-            if (dvalue > 50.0 || dvalue < -1.0)
-            {
-                return -1;
+                frequencies[i - 1][j - 1] = dvalue;
+                frequencies[j - 1][i - 1] = dvalue;
             }
-
-            frequencies[i - 1][j - 1] = dvalue;
-            frequencies[j - 1][i - 1] = dvalue;
         }
     }
     return 0;
@@ -192,7 +193,7 @@ void create_probs_table()
             }
             to_attach = gtk_entry_new();
             gtk_entry_set_width_chars(GTK_ENTRY(to_attach), 6);
-            gtk_entry_set_max_length(GTK_ENTRY(to_attach), 5);
+            gtk_entry_set_max_length(GTK_ENTRY(to_attach), 4);
             gtk_entry_set_input_purpose(GTK_ENTRY(to_attach), GTK_INPUT_PURPOSE_DIGITS);
 
             if (i == j)
@@ -712,8 +713,13 @@ void on_buildBtn_clicked(GtkButton *button, gpointer user_data)
     int maps_result = calculate_maps();
     if (maps_result == -1)
     {
-        gtk_widget_show(failed_dial);
-        // g_print("FAILED: CHECK ENTRIES!");
+        GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                         GTK_DIALOG_MODAL,
+                                                         GTK_MESSAGE_WARNING,
+                                                         GTK_BUTTONS_OK,
+                                                         "Failed. Please check entries.");
+        gtk_dialog_run(GTK_DIALOG(error_dialog));
+        gtk_widget_destroy(error_dialog);
         return;
     }
 
@@ -780,6 +786,277 @@ static gboolean on_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpoin
     return FALSE;
 }
 
+void on_loadBtn_clicked(GtkButton *button, gpointer user_data)
+{
+    GtkWidget *dialog;
+    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
+    gint res;
+
+    dialog = gtk_file_chooser_dialog_new("Open Crossover File",
+                                         NULL,
+                                         action,
+                                         "_Cancel", GTK_RESPONSE_CANCEL,
+                                         "_Open", GTK_RESPONSE_ACCEPT,
+                                         NULL);
+
+    // Only .crossover files
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Crossover files (*.crossover)");
+    gtk_file_filter_add_pattern(filter, "*.crossover");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (res == GTK_RESPONSE_ACCEPT)
+    {
+        char *filename;
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        filename = gtk_file_chooser_get_filename(chooser);
+
+        FILE *file = fopen(filename, "r");
+        if (file == NULL)
+        {
+            GtkWidget *error_dialog = gtk_message_dialog_new(NULL,
+                                                             GTK_DIALOG_MODAL,
+                                                             GTK_MESSAGE_ERROR,
+                                                             GTK_BUTTONS_OK,
+                                                             "Error opening file: %s", filename);
+            gtk_dialog_run(GTK_DIALOG(error_dialog));
+            gtk_widget_destroy(error_dialog);
+            g_free(filename);
+            gtk_widget_destroy(dialog);
+            return;
+        }
+
+        // Read number of nodes
+        int loaded_genes;
+        if (fscanf(file, "%d", &loaded_genes) != 1)
+        {
+            GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                             GTK_DIALOG_MODAL,
+                                                             GTK_MESSAGE_ERROR,
+                                                             GTK_BUTTONS_OK,
+                                                             "Invalid file format");
+            gtk_dialog_run(GTK_DIALOG(error_dialog));
+            gtk_widget_destroy(error_dialog);
+            fclose(file);
+            g_free(filename);
+            gtk_widget_destroy(dialog);
+            return;
+        }
+
+        genes_count = loaded_genes;
+        genes = (Gene *)malloc(genes_count * sizeof(Gene));
+
+        // Create the table
+        create_probs_table();
+
+        // Read node names and distances
+        for (int i = 0; i < genes_count; i++)
+        {
+            char node_name[6];
+            if (fscanf(file, "%5s", node_name) != 1)
+            {
+                GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                                 GTK_DIALOG_MODAL,
+                                                                 GTK_MESSAGE_ERROR,
+                                                                 GTK_BUTTONS_OK,
+                                                                 "Error reading node names from file");
+                gtk_dialog_run(GTK_DIALOG(error_dialog));
+                gtk_widget_destroy(error_dialog);
+                fclose(file);
+                g_free(filename);
+                gtk_widget_destroy(dialog);
+                return;
+            }
+
+            // Set node name in row and column headers
+            GtkWidget *col_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i + 1, 0);
+            GtkWidget *row_entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), 0, i + 1);
+
+            g_signal_handlers_block_by_func(col_entry, on_header_changed, row_entry);
+            g_signal_handlers_block_by_func(row_entry, on_header_changed, col_entry);
+
+            gtk_entry_set_text(GTK_ENTRY(col_entry), node_name);
+            gtk_entry_set_text(GTK_ENTRY(row_entry), node_name);
+
+            g_signal_handlers_unblock_by_func(col_entry, on_header_changed, row_entry);
+            g_signal_handlers_unblock_by_func(row_entry, on_header_changed, col_entry);
+        }
+
+        // Read distances
+        for (int i = 0; i < genes_count; i++)
+        {
+            for (int j = 0; j < genes_count; j++)
+            {
+                if (i >= j)
+                    continue;
+                double distance;
+                if (fscanf(file, "%lf", &distance) != 1)
+                {
+                    GtkWidget *error_dialog = gtk_message_dialog_new(
+                        GTK_WINDOW(main_window),
+                        GTK_DIALOG_MODAL,
+                        GTK_MESSAGE_ERROR,
+                        GTK_BUTTONS_OK,
+                        "Error reading distances from file");
+                    gtk_dialog_run(GTK_DIALOG(error_dialog));
+                    gtk_widget_destroy(error_dialog);
+                    fclose(file);
+                    g_free(filename);
+                    gtk_widget_destroy(dialog);
+                    return;
+                }
+
+                GtkWidget *entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), j + 1, i + 1);
+                if (entry && GTK_IS_ENTRY(entry))
+                {
+                    char dist_str[10];
+                    snprintf(dist_str, sizeof(dist_str), "%.4f", distance);
+                    gtk_entry_set_text(GTK_ENTRY(entry), dist_str);
+                }
+            }
+        }
+
+        fclose(file);
+        g_free(filename);
+
+        gtk_stack_set_visible_child_name(GTK_STACK(main_stack), "page1");
+    }
+
+    gtk_widget_destroy(dialog);
+}
+
+void on_saveBtn_clicked(GtkButton *button, gpointer user_data)
+{
+    // Check if we have a valid table to save
+    if (genes_count == 0)
+    {
+        GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                         GTK_DIALOG_MODAL,
+                                                         GTK_MESSAGE_WARNING,
+                                                         GTK_BUTTONS_OK,
+                                                         "No data to save. Please create a table first.");
+        gtk_dialog_run(GTK_DIALOG(error_dialog));
+        gtk_widget_destroy(error_dialog);
+        return;
+    }
+
+    GtkWidget *dialog;
+    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SAVE;
+    gint res;
+
+    dialog = gtk_file_chooser_dialog_new("Save Crossover File",
+                                         NULL,
+                                         action,
+                                         "_Cancel", GTK_RESPONSE_CANCEL,
+                                         "_Save", GTK_RESPONSE_ACCEPT,
+                                         NULL);
+
+    // Set file filter for .floyd files
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Crossover files (*.crossover)");
+    gtk_file_filter_add_pattern(filter, "*.crossover");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    // Set default extension
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (res == GTK_RESPONSE_ACCEPT)
+    {
+        char *filename;
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        filename = gtk_file_chooser_get_filename(chooser);
+
+        // Add .floyd extension
+        char *final_filename;
+        if (!g_str_has_suffix(filename, ".crossover"))
+        {
+            final_filename = g_strconcat(filename, ".crossover", NULL);
+        }
+        else
+        {
+            final_filename = g_strdup(filename);
+        }
+
+        FILE *file = fopen(final_filename, "w");
+        if (file == NULL)
+        {
+            GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                             GTK_DIALOG_MODAL,
+                                                             GTK_MESSAGE_ERROR,
+                                                             GTK_BUTTONS_OK,
+                                                             "Error creating file: %s", final_filename);
+            gtk_dialog_run(GTK_DIALOG(error_dialog));
+            gtk_widget_destroy(error_dialog);
+            g_free(filename);
+            g_free(final_filename);
+            gtk_widget_destroy(dialog);
+            return;
+        }
+
+        // Save number of genes
+        fprintf(file, "%d\n", genes_count);
+
+        // Save gene names
+        for (int i = 1; i <= genes_count; i++)
+        {
+            GtkWidget *entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), i, 0);
+            const char *node_name = gtk_entry_get_text(GTK_ENTRY(entry));
+            fprintf(file, "%s ", node_name);
+        }
+        fprintf(file, "\n");
+
+        // Save distances
+        for (int i = 1; i <= genes_count; i++)
+        {
+            for (int j = 1; j <= genes_count; j++)
+            {
+                if (i >= j)
+                    continue;
+                GtkWidget *entry = gtk_grid_get_child_at(GTK_GRID(probabilities_grid), j, i);
+                const char *text = gtk_entry_get_text(GTK_ENTRY(entry));
+
+                double p;
+                if (text[0] == '\0')
+                {
+                    p = -1.0;
+                }
+                else
+                {
+                    char *endptr;
+                    p = strtod(text, &endptr);
+
+                    // Check for invalid input
+                    if (*endptr != '\0')
+                    {
+                        GtkWidget *error_dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                                                         GTK_DIALOG_MODAL,
+                                                                         GTK_MESSAGE_ERROR,
+                                                                         GTK_BUTTONS_OK,
+                                                                         "Error creating file: %s", final_filename);
+                        gtk_dialog_run(GTK_DIALOG(error_dialog));
+                        gtk_widget_destroy(error_dialog);
+                        g_free(filename);
+                        g_free(final_filename);
+                        gtk_widget_destroy(dialog);
+                        return;
+                    }
+                }
+
+                fprintf(file, "%.3f ", p);
+            }
+            fprintf(file, "\n");
+        }
+
+        fclose(file);
+        g_free(filename);
+        g_free(final_filename);
+    }
+
+    gtk_widget_destroy(dialog);
+}
+
 int main(int argc, char *argv[])
 {
     gtk_init(&argc, &argv);
@@ -797,7 +1074,6 @@ int main(int argc, char *argv[])
     n_spin = GTK_WIDGET(gtk_builder_get_object(builder, "n_spin"));
     probabilities_grid = GTK_WIDGET(gtk_builder_get_object(builder, "probabilities_grid"));
     drawing_area = GTK_WIDGET(gtk_builder_get_object(builder, "drawing_area"));
-    failed_dial = GTK_WIDGET(gtk_builder_get_object(builder, "failed_dial"));
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_draw_event), NULL);
 
     gtk_widget_add_events(drawing_area,
