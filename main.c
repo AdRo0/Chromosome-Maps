@@ -106,6 +106,7 @@ int setup_frequencies_table()
                 }
                 if (dvalue > 50.0 || dvalue < -1.0)
                 {
+                    g_print("%d, %d\n", i, j);
                     return -1;
                 }
 
@@ -232,7 +233,7 @@ int calculate_maps(void)
     setup_genes_arr();
     int setup = setup_frequencies_table();
     if (setup == -1)
-        return;
+        return -1;
 
     int current_chr = 0;
     gboolean *visited = g_new0(gboolean, genes_count);
@@ -332,7 +333,10 @@ int calculate_maps(void)
                 dist_i = (fabs(genes[k].pos - genes[anchor_i].pos));
                 dist_j = (fabs(genes[k].pos - genes[anchor_j].pos));
                 if (haldane_to_r(dist_i) * 100 > frequencies[k][anchor_i] * 1.7 || haldane_to_r(dist_j) * 100 > frequencies[k][anchor_j] * 1.7)
+                {
+                    g_print("A");
                     return -1;
+                }
             }
             else if (dist_i > 0 && dist_j < 0)
             {
@@ -392,6 +396,7 @@ int calculate_maps(void)
                     int match = best_match(genes[j].pos, genes[i].pos, genes[i].possible_pos, dist);
                     if (match == -1)
                     {
+                        g_print("Match fail: %d, %d", i, j);
                         return -1;
                     }
                     // else if (match == 0)
@@ -911,7 +916,10 @@ void on_loadBtn_clicked(GtkButton *button, gpointer user_data)
                 if (entry && GTK_IS_ENTRY(entry))
                 {
                     char dist_str[10];
-                    snprintf(dist_str, sizeof(dist_str), "%.4f", distance);
+                    if (distance > 0)
+                        snprintf(dist_str, sizeof(dist_str), "%.4f", distance);
+                    else
+                        snprintf(dist_str, sizeof(dist_str), "");
                     gtk_entry_set_text(GTK_ENTRY(entry), dist_str);
                 }
             }
@@ -1057,6 +1065,30 @@ void on_saveBtn_clicked(GtkButton *button, gpointer user_data)
     gtk_widget_destroy(dialog);
 }
 
+void_on_main_menuBtn(GtkButton *button, gpointer user_data)
+{
+    free(genes);
+    for (int i = 0; i < genes_count; i++)
+    {
+        free(frequencies[i]);
+    }
+    free(frequencies);
+    GList *children, *iter;
+
+    children = gtk_container_get_children(GTK_CONTAINER(probabilities_grid));
+    for (iter = children; iter != NULL; iter = g_list_next(iter))
+    {
+        gtk_widget_destroy(GTK_WIDGET(iter->data));
+    }
+    g_list_free(children);
+    frequencies = NULL;
+    genes = NULL;
+    pan_x = 0;
+    pan_y = 0;
+    zoom_factor = 1.0;
+    gtk_stack_set_visible_child_name(GTK_STACK(main_stack), "page0");
+}
+
 int main(int argc, char *argv[])
 {
     gtk_init(&argc, &argv);
@@ -1089,8 +1121,6 @@ int main(int argc, char *argv[])
     gtk_main();
 
     g_object_unref(builder);
-
-    free(genes);
 
     return 0;
 }
