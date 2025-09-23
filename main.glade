@@ -4,7 +4,7 @@
   <requires lib="gtk+" version="3.24"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">1</property>
-    <property name="upper">99</property>
+    <property name="upper">50</property>
     <property name="step-increment">1</property>
     <property name="page-increment">10</property>
   </object>
@@ -49,6 +49,7 @@
                 <property name="margin-start">450</property>
                 <property name="margin-end">450</property>
                 <property name="adjustment">adjustment1</property>
+                <property name="value">1</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -240,12 +241,15 @@
               <object class="GtkBox">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
+                <property name="spacing">20</property>
                 <child>
                   <object class="GtkButton" id="saveBtn">
                     <property name="label" translatable="yes">Save</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">10</property>
                     <signal name="clicked" handler="on_saveBtn_clicked" swapped="no"/>
                   </object>
                   <packing>
@@ -261,6 +265,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
+                    <property name="margin-start">40</property>
+                    <property name="margin-end">10</property>
                     <signal name="clicked" handler="on_buildBtn_clicked" swapped="no"/>
                   </object>
                   <packing>
@@ -273,6 +279,7 @@
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
+                <property name="padding">10</property>
                 <property name="position">2</property>
               </packing>
             </child>
@@ -385,8 +392,8 @@
       <object class="GtkHeaderBar" id="TitleBar">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="title" translatable="yes">Knapsack</property>
-        <property name="subtitle" translatable="yes">Operations Research</property>
+        <property name="title" translatable="yes">Chromosome Maps</property>
+        <property name="subtitle" translatable="yes">Computational Molecular Biology</property>
         <property name="show-close-button">True</property>
       </object>
     </child>
