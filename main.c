@@ -405,7 +405,6 @@ static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data
 
     double chr_spacing = 200; // vertical spacing between chromosomes
 
-    int line_index = 0;
     for (int chr = 0; chr < chr_count; chr++)
     {
         // Y offset for this chromosome
@@ -451,7 +450,6 @@ static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data
 
         double margin = rect_w * 0.05;
         double usable_w = rect_w - 2 * margin;
-        double gy = (y0 + y1) / 2.0;
 
         // Precompute x positions - these are already relative to x0 which includes offset
         double *gene_x = g_new(double, genes_count);
@@ -463,59 +461,49 @@ static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data
             gene_x[i] = x0 + margin + norm * usable_w;
         }
 
-        // Draw gene markers + labels
+        // Find most negative gene position to shift positions so left-most = 0
+        double min_pos_global = DBL_MAX;
+        for (int i = 0; i < genes_count; i++)
+        {
+            if (genes[i].chromosome != chr)
+                continue;
+            if (genes[i].pos < min_pos_global)
+                min_pos_global = genes[i].pos;
+        }
+        double shift = (min_pos_global < 0) ? -min_pos_global : 0;
+
+        // Draw gene markers + labels + shifted positions
         for (int i = 0; i < genes_count; i++)
         {
             if (genes[i].chromosome != chr)
                 continue;
 
+            // Draw vertical line for gene
             cairo_set_source_rgb(cr, 1, 0, 0);
             cairo_set_line_width(cr, 4.0);
             cairo_move_to(cr, gene_x[i], y0);
             cairo_line_to(cr, gene_x[i], y1);
             cairo_stroke(cr);
 
+            // Draw gene name above chromosome
             cairo_set_source_rgb(cr, 0, 0, 0);
             cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
             cairo_set_font_size(cr, 12.0);
             cairo_text_extents_t extents;
             cairo_text_extents(cr, genes[i].name, &extents);
             double label_x = gene_x[i] - extents.width / 2.0;
-            double label_y = y0 - 8; // 8 pixels above the chromosome rectangle
+            double label_y = y0 - 8; // 8 pixels above
             cairo_move_to(cr, label_x, label_y);
             cairo_show_text(cr, genes[i].name);
-        }
 
-        // Draw cM distances (only i < j, same chromosome) for all gene pairs in this map
-        for (int i = 0; i < genes_count; i++)
-        {
-            if (genes[i].chromosome != chr)
-                continue;
-            for (int j = i + 1; j < genes_count; j++)
-            {
-                if (genes[j].chromosome != chr)
-                    continue;
-                if (frequencies[i][j] == -1 || frequencies[i][j] == 50)
-                    continue;
-
-                double cm = haldane_to_cm(frequencies[i][j]);
-                double offset = (line_index + 1) * 20.0;
-                double yline = y1 + offset;
-
-                cairo_set_source_rgb(cr, 0, 0, 0);
-                cairo_set_line_width(cr, 1.5);
-                cairo_move_to(cr, gene_x[i], yline);
-                cairo_line_to(cr, gene_x[j], yline);
-                cairo_stroke(cr);
-
-                char buf[32];
-                snprintf(buf, sizeof(buf), "%.1f cM", cm);
-                double midx = (gene_x[i] + gene_x[j]) / 2.0;
-                cairo_move_to(cr, midx - 10, yline - 4);
-                cairo_show_text(cr, buf);
-
-                line_index++;
-            }
+            // Draw shifted gene position below chromosome
+            char pos_buf[32];
+            snprintf(pos_buf, sizeof(pos_buf), "%.2f", genes[i].pos + shift);
+            cairo_text_extents(cr, pos_buf, &extents);
+            double pos_x = gene_x[i] - extents.width / 2.0;
+            double pos_y = y1 + 15; // 15 pixels below
+            cairo_move_to(cr, pos_x, pos_y);
+            cairo_show_text(cr, pos_buf);
         }
 
         g_free(gene_x);
