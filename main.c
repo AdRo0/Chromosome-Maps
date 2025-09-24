@@ -106,7 +106,6 @@ int setup_frequencies_table()
                 }
                 if (dvalue > 50.0 || dvalue < -1.0)
                 {
-                    g_print("%d, %d\n", i, j);
                     return -1;
                 }
 
@@ -334,7 +333,6 @@ int calculate_maps(void)
                 dist_j = (fabs(genes[k].pos - genes[anchor_j].pos));
                 if (haldane_to_r(dist_i) * 100 > frequencies[k][anchor_i] * 1.7 || haldane_to_r(dist_j) * 100 > frequencies[k][anchor_j] * 1.7)
                 {
-                    g_print("A");
                     return -1;
                 }
             }
@@ -396,19 +394,19 @@ int calculate_maps(void)
                     int match = best_match(genes[j].pos, genes[i].pos, genes[i].possible_pos, dist);
                     if (match == -1)
                     {
-                        g_print("Match fail: %d, %d", i, j);
+                        // g_print("Match fail: %d, %d", i, j);
                         return -1;
                     }
-                    // else if (match == 0)
-                    // {
-                    //     genes[i].possible_pos = -1;
-                    // }
-                    // else
-                    // {
-                    //     genes[i].pos = genes[i].possible_pos;
-                    //     genes[i].possible_pos = -1;
-                    // }
-                    // changes++;
+                    else if (match == 0)
+                    {
+                        genes[i].possible_pos = -1;
+                    }
+                    else
+                    {
+                        genes[i].pos = genes[i].possible_pos;
+                        genes[i].possible_pos = -1;
+                    }
+                    changes++;
                 }
             }
         }
